@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Validação ENEM</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }
+    .card { background: #1e293b; border-radius: 12px; padding: 20px; max-width: 600px; margin: auto; }
+    h1 { color: #38bdf8; text-align: center; }
+    input, button { padding: 10px; margin: 5px 0; border-radius: 6px; border: none; }
+    input { width: 100%; }
+    button { cursor: pointer; font-weight: bold; }
+    .btn-blue { background: #3b82f6; color: white; }
+    #statusBox { background: #334155; padding: 10px; border-radius: 6px; margin: 10px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { border: 1px solid #475569; padding: 8px; text-align: center; }
+    th { background: #1e40af; color: white; }
+    td { background: #0f172a; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Validação de Boletim ENEM</h1>
+    <p>CPF da sessão (mascarado): {{ cpf_mask }}</p>
+
+    <label>Chave do Boletim</label>
+    <input type="text" id="chave" placeholder="Digite a chave">
+
+    <div>
+      <button class="btn-blue" onclick="start()">Iniciar verificação</button>
+    </div>
+
+    <div id="statusBox">Aguardando início...</div>
+    <div id="notasBox"></div>
+  </div>
+
+<script>
+let verificationId = null;
+
+async function start() {
+  const chave = document.getElementById("chave").value.trim();
+  const res = await fetch("/v1/enem/start", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({chave})
+  });
+  const data = await res.json();
+  verificationId = data.verification_id;
+  document.getElementById("statusBox").innerText =
+    "Janela aberta. Resolva o CAPTCHA no navegador e clique Enviar lá dentro...";
+  pollStatus();
+}
+
+async function pollStatus() {
+  if (!verificationId) return;
+  const res = await fetch("/v1/enem/status/" + verificationId);
+  const data = await res.json();
+
+  if (data.status === "negado") {
+    document.getElementById("statusBox").innerText = "⚠️ Acesso negado: CPF não confere";
+    return;
+  }
+
+  if (data.status !== "captcha_pendente" && data.result) {
+    showNotas(data.result);
+  } else {
+    setTimeout(pollStatus, 3000);
+  }
+}
+
+function showNotas(result) {
+  if (!result) return;
+  let html = "<h3>Resultado ENEM " + (result.ano || '') + "</h3>";
+  html += "<p><b>Nome:</b> " + (result.nome || '') + "</p>";
+  html += "<p><b>CPF:</b> " + (result.cpf_mask || '') + "</p>";
+  html += "<table><tr><th>Área</th><th>Nota</th></tr>";
+  for (const [area, nota] of Object.entries(result.areas)) {
+    html += "<tr><td>" + area + "</td><td>" + (nota || '-') + "</td></tr>";
+  }
+  html += "</table>";
+  document.getElementById("notasBox").innerHTML = html;
+  document.getElementById("statusBox").innerText = "Boletim carregado ✅";
+}
+</script>
+</body>
+</html>
